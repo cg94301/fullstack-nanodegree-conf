@@ -14,6 +14,7 @@ __author__ = 'wesc+api@google.com (Wesley Chun)'
 
 
 from datetime import datetime
+import time
 
 import endpoints
 from protorpc import messages
@@ -36,6 +37,8 @@ from models import ConferenceForms
 from models import ConferenceQueryForm
 from models import ConferenceQueryForms
 from models import TeeShirtSize
+from models import Session
+from models import SessionForm
 
 from settings import WEB_CLIENT_ID
 from settings import ANDROID_CLIENT_ID
@@ -56,6 +59,11 @@ DEFAULTS = {
     "maxAttendees": 0,
     "seatsAvailable": 0,
     "topics": [ "Default", "Topic" ],
+}
+
+DEFAULTS_SESSION = {
+    "speaker": "Anonymous",
+    "duration": 45,
 }
 
 OPERATORS = {
@@ -83,6 +91,16 @@ CONF_POST_REQUEST = endpoints.ResourceContainer(
     ConferenceForm,
     websafeConferenceKey=messages.StringField(1),
 )
+
+SESSION_POST_REQUEST = endpoints.ResourceContainer(
+    SessionForm,
+    websafeConferenceKey=messages.StringField(1),
+)
+
+class Account(ndb.Model):
+  username = ndb.StringProperty()
+  userid = ndb.IntegerProperty()
+  email = ndb.StringProperty()
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -115,6 +133,9 @@ class ConferenceApi(remote.Service):
 
     def _createConferenceObject(self, request):
         """Create or update Conference object, returning ConferenceForm/request."""
+
+        print request
+
         # preload necessary data items
         user = endpoints.get_current_user()
         if not user:
@@ -150,10 +171,18 @@ class ConferenceApi(remote.Service):
         # generate Profile Key based on user ID and Conference
         # ID based on Profile key get Conference key from ID
         p_key = ndb.Key(Profile, user_id)
+        print "p_key"
+        print p_key
         c_id = Conference.allocate_ids(size=1, parent=p_key)[0]
+        print "c_id"
+        print c_id
         c_key = ndb.Key(Conference, c_id, parent=p_key)
+        print "c_key"
+        print c_key
         data['key'] = c_key
         data['organizerUserId'] = request.organizerUserId = user_id
+
+        print data
 
         # create Conference, send email to organizer confirming
         # creation of Conference & return (modified) ConferenceForm
@@ -163,6 +192,12 @@ class ConferenceApi(remote.Service):
             url='/tasks/send_confirmation_email'
         )
         return request
+
+    @endpoints.method(ConferenceForm, ConferenceForm, path='conference',
+            http_method='POST', name='createConference')
+    def createConference(self, request):
+        """Create new conference."""
+        return self._createConferenceObject(request)
 
 
     @ndb.transactional()
@@ -204,14 +239,6 @@ class ConferenceApi(remote.Service):
         prof = ndb.Key(Profile, user_id).get()
         return self._copyConferenceToForm(conf, getattr(prof, 'displayName'))
 
-
-    @endpoints.method(ConferenceForm, ConferenceForm, path='conference',
-            http_method='POST', name='createConference')
-    def createConference(self, request):
-        """Create new conference."""
-        return self._createConferenceObject(request)
-
-
     @endpoints.method(CONF_POST_REQUEST, ConferenceForm,
             path='conference/{websafeConferenceKey}',
             http_method='PUT', name='updateConference')
@@ -220,12 +247,15 @@ class ConferenceApi(remote.Service):
         return self._updateConferenceObject(request)
 
 
+
     @endpoints.method(CONF_GET_REQUEST, ConferenceForm,
             path='conference/{websafeConferenceKey}',
             http_method='GET', name='getConference')
     def getConference(self, request):
         """Return requested conference (by websafeConferenceKey)."""
         # get Conference object from request; bail if not found
+        print "DEBUG"
+        print request.websafeConferenceKey
         conf = ndb.Key(urlsafe=request.websafeConferenceKey).get()
         if not conf:
             raise endpoints.NotFoundException(
@@ -315,7 +345,6 @@ class ConferenceApi(remote.Service):
         # get all keys and use get_multi for speed
         organisers = [(ndb.Key(Profile, conf.organizerUserId)) for conf in conferences]
         profiles = ndb.get_multi(organisers)
-
         # put display names in a dict for easier fetching
         names = {}
         for profile in profiles:
@@ -326,6 +355,67 @@ class ConferenceApi(remote.Service):
                 items=[self._copyConferenceToForm(conf, names[conf.organizerUserId]) for conf in \
                 conferences]
         )
+
+# - - - Session objects - - - - - - - - - - - - - - - - -
+
+    def _createSessionObject(self, request):
+
+        urlkey = request.websafeConferenceKey
+        user = endpoints.get_current_user()
+        if not user:
+            raise endpoints.UnauthorizedException('Authorization required')
+        user_id = getUserId(user)
+
+        if not request.name:
+            raise endpoints.BadRequestException("Session 'name' field required")
+
+        # copy SessionForm/ProtoRPC Message into dict
+        data = {field.name: getattr(request, field.name) for field in request.all_fields()}
+
+        del data['websafeConferenceKey']
+
+        data['organizerUserId'] = user_id
+
+
+        # convert dates from strings to Date objects; set month based on start_date
+        if data['date']:
+          data['date'] = datetime.strptime(data['date'][:10], "%Y-%m-%d").date()
+
+        # convert dates from strings to Date objects; set month based on start_date
+        if data['time']:
+          print "DEBUG"
+          print data['time']
+          print datetime.strptime(data['time'],"%H:%M:%S").time()
+          data['time'] = datetime.strptime(data['time'],"%H:%M:%S").time()
+
+        # update existing conference
+        conf_key = ndb.Key(urlsafe=urlkey)
+        conf = conf_key.get()
+
+        # check that conference exists
+        if not conf:
+            raise endpoints.NotFoundException(
+                'No conference found with key: %s' % urlkey)
+
+        # generate session id with conference key as parent
+        session_id = Session.allocate_ids(size=1, parent=conf_key)[0]
+
+        # generate session key with conference key as parent
+        session_key = ndb.Key(Session, session_id, parent=conf_key)
+
+        print data
+
+        # Write to datastore
+        Session(**data).put()
+
+        return message_types.VoidMessage()
+
+    @endpoints.method(SESSION_POST_REQUEST, message_types.VoidMessage,
+            path='session/{websafeConferenceKey}',
+            http_method='PUT', name='createSession')
+    def createSession(self, request):
+        """Update conference w/provided fields & return w/updated info."""
+        return self._createSessionObject(request)
 
 
 # - - - Profile objects - - - - - - - - - - - - - - - - - - -
