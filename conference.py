@@ -14,7 +14,6 @@ __author__ = 'wesc+api@google.com (Wesley Chun)'
 
 
 from datetime import datetime
-import time
 
 import endpoints
 from protorpc import messages
@@ -360,47 +359,50 @@ class ConferenceApi(remote.Service):
 
     def _createSessionObject(self, request):
 
-        urlkey = request.websafeConferenceKey
+        # Check that user logged in
         user = endpoints.get_current_user()
         if not user:
             raise endpoints.UnauthorizedException('Authorization required')
         user_id = getUserId(user)
 
-        if not request.name:
-            raise endpoints.BadRequestException("Session 'name' field required")
-
-        # copy SessionForm/ProtoRPC Message into dict
-        data = {field.name: getattr(request, field.name) for field in request.all_fields()}
-
-        del data['websafeConferenceKey']
-
-        data['organizerUserId'] = user_id
-
-
-        # convert dates from strings to Date objects; set month based on start_date
-        if data['date']:
-          data['date'] = datetime.strptime(data['date'][:10], "%Y-%m-%d").date()
-
-        # convert dates from strings to Date objects; set month based on start_date
-        if data['time']:
-          print "DEBUG"
-          print data['time']
-          print datetime.strptime(data['time'],"%H:%M:%S").time()
-          data['time'] = datetime.strptime(data['time'],"%H:%M:%S").time()
-
-        # update existing conference
+        # Get conference 
+        urlkey = request.websafeConferenceKey
         conf_key = ndb.Key(urlsafe=urlkey)
         conf = conf_key.get()
 
-        # check that conference exists
+        # Check that conference exists
         if not conf:
             raise endpoints.NotFoundException(
                 'No conference found with key: %s' % urlkey)
 
-        # generate session id with conference key as parent
+        # Check that logged in user is organizer
+        if user_id != conf.organizerUserId:
+            raise endpoints.ForbiddenException(
+                'Only the organizer can add sessions to the conference.')
+
+        # Every session must have a name
+        if not request.name:
+            raise endpoints.BadRequestException("Session 'name' field required")
+
+        # Copy SessionForm/ProtoRPC Message into dictionary
+        data = {field.name: getattr(request, field.name) for field in request.all_fields()}
+
+        # Prepare all data for SessionForm
+        del data['websafeConferenceKey']
+        data['organizerUserId'] = user_id
+
+        # Convert dates from strings to DateTime objects
+        if data['date']:
+          data['date'] = datetime.strptime(data['date'][:10], "%Y-%m-%d").date()
+
+        # Convert time from strings to DateTime objects
+        if data['startTime']:
+          data['startTime'] = datetime.strptime(data['startTime'],"%H:%M:%S").time()
+
+        # Generate session id
         session_id = Session.allocate_ids(size=1, parent=conf_key)[0]
 
-        # generate session key with conference key as parent
+        # Generate session key with conference key as parent
         session_key = ndb.Key(Session, session_id, parent=conf_key)
 
         print data
@@ -416,6 +418,7 @@ class ConferenceApi(remote.Service):
     def createSession(self, request):
         """Update conference w/provided fields & return w/updated info."""
         return self._createSessionObject(request)
+
 
 
 # - - - Profile objects - - - - - - - - - - - - - - - - - - -

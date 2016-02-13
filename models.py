@@ -116,7 +116,7 @@ class Session(ndb.Model):
     duration        = ndb.IntegerProperty()
     typeOfSession   = ndb.StringProperty()
     date            = ndb.DateProperty()
-    time            = ndb.TimeProperty()
+    startTime       = ndb.TimeProperty()
     organizerUserId = ndb.StringProperty()
 
 
@@ -128,5 +128,5 @@ class SessionForm(messages.Message):
     duration        = messages.IntegerField(4, variant=messages.Variant.INT32)
     typeOfSession   = messages.StringField(5)
     date            = messages.StringField(6)
-    time            = messages.StringField(7)
+    startTime       = messages.StringField(7)
 
