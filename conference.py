@@ -38,6 +38,7 @@ from models import ConferenceQueryForms
 from models import TeeShirtSize
 from models import Session
 from models import SessionForm
+from models import SessionForms
 
 from settings import WEB_CLIENT_ID
 from settings import ANDROID_CLIENT_ID
@@ -89,6 +90,11 @@ CONF_GET_REQUEST = endpoints.ResourceContainer(
 CONF_POST_REQUEST = endpoints.ResourceContainer(
     ConferenceForm,
     websafeConferenceKey=messages.StringField(1),
+)
+
+SESSION_GET_REQUEST = endpoints.ResourceContainer(
+    typeOfSession = messages.StringField(1),
+    websafeConferenceKey=messages.StringField(2),
 )
 
 SESSION_POST_REQUEST = endpoints.ResourceContainer(
@@ -357,6 +363,25 @@ class ConferenceApi(remote.Service):
 
 # - - - Session objects - - - - - - - - - - - - - - - - -
 
+    def _copySessionToForm(self, session, displayName):
+        """Copy relevant fields from Conference to ConferenceForm."""
+        sf = SessionForm()
+        for field in sf.all_fields():
+            if hasattr(session, field.name):
+                # convert Date to date string; just copy others
+                if field.name.endswith('date'):
+                    setattr(sf, field.name, str(getattr(session, field.name)))
+                elif field.name.endswith('startTime'):
+                    setattr(sf, field.name, str(getattr(session, field.name)))
+                else:
+                    setattr(sf, field.name, getattr(session, field.name))
+            elif field.name == "websafeKey":
+                setattr(sf, field.name, session.key.urlsafe())
+        if displayName:
+            setattr(sf, 'organizerDisplayName', displayName)
+        sf.check_initialized()
+        return sf
+
     def _createSessionObject(self, request):
 
         # Check that user logged in
@@ -389,6 +414,8 @@ class ConferenceApi(remote.Service):
 
         # Prepare all data for SessionForm
         del data['websafeConferenceKey']
+        del data['websafeKey']
+        del data['organizerDisplayName']
         data['organizerUserId'] = user_id
 
         # Convert dates from strings to DateTime objects
@@ -404,6 +431,10 @@ class ConferenceApi(remote.Service):
 
         # Generate session key with conference key as parent
         session_key = ndb.Key(Session, session_id, parent=conf_key)
+        data['key'] = session_key
+
+        print "session_key"
+        print session_key
 
         print data
 
@@ -420,6 +451,39 @@ class ConferenceApi(remote.Service):
         return self._createSessionObject(request)
 
 
+    @endpoints.method(SESSION_GET_REQUEST, SessionForms,
+            path='getConferenceSessions',
+            http_method='POST', name='getConferenceSessions')
+    def getConferenceSessions(self, request):
+        """Return sessionss by conference."""
+
+        # Get conference 
+        urlkey = request.websafeConferenceKey
+        conf_key = ndb.Key(urlsafe=urlkey)
+        conf = conf_key.get()
+        print conf
+
+        # create ancestor query for all key matches for this user
+        sessions = Session.query(ancestor=conf_key)
+        print sessions
+
+        for session in sessions:
+          print "session:"
+          print session
+
+        # get organizers
+        organisers = [ndb.Key(Profile, session.organizerUserId) for session in sessions]
+        profiles = ndb.get_multi(organisers)
+
+        # put display names in a dict for easier fetching
+        names = {}
+        for profile in profiles:
+            names[profile.key.id()] = profile.displayName
+
+        # return set of SessionForm objects per Session
+        return SessionForms(
+            items=[self._copySessionToForm(session, names[session.organizerUserId]) for session in sessions]
+        )
 
 # - - - Profile objects - - - - - - - - - - - - - - - - - - -
 

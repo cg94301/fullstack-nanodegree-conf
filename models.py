@@ -109,7 +109,7 @@ class ConferenceQueryForms(messages.Message):
     filters = messages.MessageField(ConferenceQueryForm, 1, repeated=True)
 
 class Session(ndb.Model):
-    """Conference -- Conference object"""
+    """Session -- Session object"""
     name            = ndb.StringProperty(required=True)
     highlights      = ndb.StringProperty()
     speaker         = ndb.StringProperty()
@@ -121,7 +121,7 @@ class Session(ndb.Model):
 
 
 class SessionForm(messages.Message):
-    """ConferenceForm -- Conference outbound form message"""
+    """SessionForm -- Session outbound form message"""
     name            = messages.StringField(1)
     highlights      = messages.StringField(2)
     speaker         = messages.StringField(3)
@@ -129,4 +129,10 @@ class SessionForm(messages.Message):
     typeOfSession   = messages.StringField(5)
     date            = messages.StringField(6)
     startTime       = messages.StringField(7)
+    organizerUserId = messages.StringField(8)
+    organizerDisplayName = messages.StringField(9)
+    websafeKey      = messages.StringField(10)
 
+class SessionForms(messages.Message):
+    """SessionForms -- multiple Sessions outbound form message"""
+    items = messages.MessageField(SessionForm, 1, repeated=True)
