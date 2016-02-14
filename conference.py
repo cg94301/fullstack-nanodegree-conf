@@ -110,6 +110,10 @@ SESSION_POST_REQUEST = endpoints.ResourceContainer(
     websafeConferenceKey=messages.StringField(1),
 )
 
+SESSION_WISH_REQUEST = endpoints.ResourceContainer(
+    websafeSessionKey=messages.StringField(1),
+)
+
 class Account(ndb.Model):
   username = ndb.StringProperty()
   userid = ndb.IntegerProperty()
@@ -518,6 +522,98 @@ class ConferenceApi(remote.Service):
     def getSessionsBySpeaker(self, request):
         """Get sessions by speaker."""
         return self._getSessions(request)
+
+# - - - Session Wishlist - - - - - - - - - - - - - - - - - - -
+
+    @ndb.transactional(xg=True)
+    def _sessionRegistration(self, request, reg=True):
+        """Register or unregister user for selected session."""
+        retval = None
+        prof = self._getProfileFromUser() # get user Profile
+
+        # check if session exists given websafeSessionKey
+        # get session; check that it exists
+        wssk = request.websafeSessionKey
+        sess = ndb.Key(urlsafe=wssk).get()
+        if not sess:
+            raise endpoints.NotFoundException(
+                'No session found with key: %s' % wssk)
+
+        # register
+        if reg:
+            # check if user already registered otherwise add
+            if wssk in prof.sessionKeysToAttend:
+                raise ConflictException(
+                    "You have already registered for this session")
+
+            # check if seats avail
+            #if conf.seatsAvailable <= 0:
+            #    raise ConflictException(
+            #        "There are no seats available.")
+
+            # register user, take away one seat
+            prof.sessionKeysToAttend.append(wssk)
+            #conf.seatsAvailable -= 1
+            retval = True
+
+        # unregister
+        else:
+            # check if user already registered
+            if wssk in prof.sessionKeysToAttend:
+
+                # unregister user, add back one seat
+                prof.sessionKeysToAttend.remove(wssk)
+                #conf.seatsAvailable += 1
+                retval = True
+            else:
+                retval = False
+
+        # write things back to the datastore & return
+        prof.put()
+        sess.put()
+        return BooleanMessage(data=retval)
+
+
+    @endpoints.method(message_types.VoidMessage, SessionForms,
+            path='sessions/attending',
+            http_method='GET', name='getSessionsInWishlist')
+    def getSessionsInWishlist(self, request):
+        """Get list of sessions that user has registered for."""
+        prof = self._getProfileFromUser() # get user Profile
+        sess_keys = [ndb.Key(urlsafe=wssk) for wssk in prof.sessionKeysToAttend]
+        sessions = ndb.get_multi(sess_keys)
+
+        # get organizers
+        organisers = [ndb.Key(Profile, session.organizerUserId) for session in sessions]
+        profiles = ndb.get_multi(organisers)
+
+        # put display names in a dict for easier fetching
+        names = {}
+        for profile in profiles:
+            names[profile.key.id()] = profile.displayName
+
+        # return set of ConferenceForm objects per Conference
+        return SessionForms(items=[self._copySessionToForm(session, names[session.organizerUserId])\
+         for session in sessions]
+        )
+
+
+    @endpoints.method(SESSION_WISH_REQUEST, BooleanMessage,
+            path='session/{websafeSessionKey}',
+            http_method='POST', name='addSessionToWishlist')
+    def addSessionToWishList(self, request):
+        """Add select session to wishlist."""
+        return self._sessionRegistration(request)
+
+
+    @endpoints.method(SESSION_WISH_REQUEST, BooleanMessage,
+            path='session/{websafeSessionKey}',
+            http_method='DELETE', name='deleteSessionInWishlist')
+    def deleteSessionInWishList(self, request):
+        """Unregister user for selected session."""
+        return self._sessionRegistration(request, reg=False)
+
+
 
 # - - - Profile objects - - - - - - - - - - - - - - - - - - -
 
