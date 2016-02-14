@@ -465,7 +465,10 @@ class ConferenceApi(remote.Service):
 
         # create ancestor query for all key matches for this user
         sessions = Session.query(ancestor=conf_key)
-        print sessions
+
+        # if typeOfSession has been specified, filter by that
+        if request.typeOfSession:
+          sessions = sessions.filter(Session.typeOfSession==request.typeOfSession)
 
         for session in sessions:
           print "session:"
