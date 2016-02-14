@@ -93,9 +93,16 @@ CONF_POST_REQUEST = endpoints.ResourceContainer(
 )
 
 SESSION_GET_REQUEST = endpoints.ResourceContainer(
+    websafeConferenceKey=messages.StringField(2),
+)
+
+SESSION_GET_REQUEST_BYTYPE = endpoints.ResourceContainer(
     typeOfSession = messages.StringField(1),
     websafeConferenceKey=messages.StringField(2),
-    speaker = messages.StringField(3),
+)
+
+SESSION_GET_REQUEST_BYSPEAKER = endpoints.ResourceContainer(
+    speaker = messages.StringField(1),
 )
 
 SESSION_POST_REQUEST = endpoints.ResourceContainer(
@@ -455,7 +462,7 @@ class ConferenceApi(remote.Service):
         """Return sessionss by conference, typeOfSession or speaker."""
 
         # Get conference 
-        if request.websafeConferenceKey:
+        if hasattr(request, 'websafeConferenceKey') and request.websafeConferenceKey:
           urlkey = request.websafeConferenceKey
           conf_key = ndb.Key(urlsafe=urlkey)
           conf = conf_key.get()
@@ -465,7 +472,7 @@ class ConferenceApi(remote.Service):
           sessions = Session.query(ancestor=conf_key)
 
           # if typeOfSession has been specified, filter by that
-          if request.typeOfSession:
+          if hasattr(request, 'typeOfSession') and request.typeOfSession:
             sessions = sessions.filter(Session.typeOfSession==request.typeOfSession)
 
         elif request.speaker:
@@ -496,30 +503,20 @@ class ConferenceApi(remote.Service):
             http_method='POST', name='getConferenceSessions')
     def getConferenceSessions(self, request):
         """Get sessions by conference."""
-        if not request.websafeConferenceKey:
-          raise endpoints.UnauthorizedException('Must specify conference')
-        if request.typeOfSession:
-          raise endpoints.UnauthorizedException('Do not specify type of Session for this search')
         return self._getSessions(request)
 
-    @endpoints.method(SESSION_GET_REQUEST, SessionForms,
+    @endpoints.method(SESSION_GET_REQUEST_BYTYPE, SessionForms,
             path='getConferenceSessionsByType',
             http_method='POST', name='getConferenceSessionsByType')
     def getConferenceSessionsByType(self, request):
         """Get sessions by conference and type."""
-        if not request.websafeConferenceKey:
-          raise endpoints.UnauthorizedException('Must specify conference')
-        if not request.typeOfSession:
-          raise endpoints.UnauthorizedException('Must specify type of Session')
         return self._getSessions(request)
 
-    @endpoints.method(SESSION_GET_REQUEST, SessionForms,
+    @endpoints.method(SESSION_GET_REQUEST_BYSPEAKER, SessionForms,
             path='getSessionsBySpeaker',
             http_method='POST', name='getSessionsBySpeaker')
     def getSessionsBySpeaker(self, request):
         """Get sessions by speaker."""
-        if request.websafeConferenceKey:
-          raise endpoints.UnauthorizedException('Do not specify conference key when searching by speaker only')
         return self._getSessions(request)
 
 # - - - Profile objects - - - - - - - - - - - - - - - - - - -
