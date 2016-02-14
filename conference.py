@@ -95,6 +95,7 @@ CONF_POST_REQUEST = endpoints.ResourceContainer(
 SESSION_GET_REQUEST = endpoints.ResourceContainer(
     typeOfSession = messages.StringField(1),
     websafeConferenceKey=messages.StringField(2),
+    speaker = messages.StringField(3),
 )
 
 SESSION_POST_REQUEST = endpoints.ResourceContainer(
@@ -450,25 +451,26 @@ class ConferenceApi(remote.Service):
         """Update conference w/provided fields & return w/updated info."""
         return self._createSessionObject(request)
 
-
-    @endpoints.method(SESSION_GET_REQUEST, SessionForms,
-            path='getConferenceSessions',
-            http_method='POST', name='getConferenceSessions')
-    def getConferenceSessions(self, request):
-        """Return sessionss by conference."""
+    def _getSessions(self, request):
+        """Return sessionss by conference, typeOfSession or speaker."""
 
         # Get conference 
-        urlkey = request.websafeConferenceKey
-        conf_key = ndb.Key(urlsafe=urlkey)
-        conf = conf_key.get()
-        print conf
+        if request.websafeConferenceKey:
+          urlkey = request.websafeConferenceKey
+          conf_key = ndb.Key(urlsafe=urlkey)
+          conf = conf_key.get()
+          print conf
 
-        # create ancestor query for all key matches for this user
-        sessions = Session.query(ancestor=conf_key)
+          # create ancestor query for all key matches for this user
+          sessions = Session.query(ancestor=conf_key)
 
-        # if typeOfSession has been specified, filter by that
-        if request.typeOfSession:
-          sessions = sessions.filter(Session.typeOfSession==request.typeOfSession)
+          # if typeOfSession has been specified, filter by that
+          if request.typeOfSession:
+            sessions = sessions.filter(Session.typeOfSession==request.typeOfSession)
+
+        elif request.speaker:
+          sessions = Session.query()
+          sessions = sessions.filter(Session.speaker==request.speaker)
 
         for session in sessions:
           print "session:"
@@ -487,6 +489,36 @@ class ConferenceApi(remote.Service):
         return SessionForms(
             items=[self._copySessionToForm(session, names[session.organizerUserId]) for session in sessions]
         )
+
+
+    @endpoints.method(SESSION_GET_REQUEST, SessionForms,
+            path='getConferenceSessions',
+            http_method='POST', name='getConferenceSessions')
+    def getConferenceSessions(self, request):
+        """Get sessions by conference."""
+        if not request.websafeConferenceKey:
+          raise endpoints.UnauthorizedException('Must specify conference')
+        return self._getSessions(request)
+
+    @endpoints.method(SESSION_GET_REQUEST, SessionForms,
+            path='getConferenceSessionsByType',
+            http_method='POST', name='getConferenceSessionsByType')
+    def getConferenceSessionsByType(self, request):
+        """Get sessions by conference and type."""
+        if not request.websafeConferenceKey:
+          raise endpoints.UnauthorizedException('Must specify conference')
+        if not request.typeOfSession:
+          raise endpoints.UnauthorizedException('Must specify type of Session')
+        return self._getSessions(request)
+
+    @endpoints.method(SESSION_GET_REQUEST, SessionForms,
+            path='getSessionsBySpeaker',
+            http_method='POST', name='getSessionsBySpeaker')
+    def getSessionsBySpeaker(self, request):
+        """Get sessions by speaker."""
+        if request.websafeConferenceKey:
+          raise endpoints.UnauthorizedException('Do not specify conference key when searching by speaker only')
+        return self._getSessions(request)
 
 # - - - Profile objects - - - - - - - - - - - - - - - - - - -
 
