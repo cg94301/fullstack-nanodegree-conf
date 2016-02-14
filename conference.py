@@ -498,6 +498,8 @@ class ConferenceApi(remote.Service):
         """Get sessions by conference."""
         if not request.websafeConferenceKey:
           raise endpoints.UnauthorizedException('Must specify conference')
+        if request.typeOfSession:
+          raise endpoints.UnauthorizedException('Do not specify type of Session for this search')
         return self._getSessions(request)
 
     @endpoints.method(SESSION_GET_REQUEST, SessionForms,
