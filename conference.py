@@ -50,6 +50,7 @@ from utils import getUserId
 EMAIL_SCOPE = endpoints.EMAIL_SCOPE
 API_EXPLORER_CLIENT_ID = endpoints.API_EXPLORER_CLIENT_ID
 MEMCACHE_ANNOUNCEMENTS_KEY = "RECENT_ANNOUNCEMENTS"
+MEMCACHE_SESSIONS_KEY = "RECENT_SESSIONS"
 ANNOUNCEMENT_TPL = ('Last chance to attend! The following conferences '
                     'are nearly sold out: %s')
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -204,6 +205,7 @@ class ConferenceApi(remote.Service):
         # create Conference, send email to organizer confirming
         # creation of Conference & return (modified) ConferenceForm
         Conference(**data).put()
+
         taskqueue.add(params={'email': user.email(),
             'conferenceInfo': repr(request)},
             url='/tasks/send_confirmation_email'
@@ -452,6 +454,12 @@ class ConferenceApi(remote.Service):
 
         # Write to datastore
         Session(**data).put()
+
+        
+        print data['speaker']
+        taskqueue.add(params={'speaker': data['speaker']},
+                      url='/tasks/set_session_announcement'
+        )
 
         return message_types.VoidMessage()
 
@@ -726,6 +734,42 @@ class ConferenceApi(remote.Service):
         """Return Announcement from memcache."""
         return StringMessage(data=memcache.get(MEMCACHE_ANNOUNCEMENTS_KEY) or "")
 
+    @staticmethod
+    def _cacheSessionAnnouncement(speaker):
+      """Create Session Announcement & assign to memcache.
+      """
+      #confs = Conference.query(ndb.AND(
+      #    Conference.seatsAvailable <= 5,
+      #    Conference.seatsAvailable > 0)
+      #).fetch(projection=[Conference.name])
+
+      print "MEMCACHE Session called"
+      print speaker
+
+      memcache.set(MEMCACHE_SESSIONS_KEY, speaker)
+
+      return speaker
+#        if confs:
+#            # If there are almost sold out conferences,
+#            # format announcement and set it in memcache
+#            announcement = ANNOUNCEMENT_TPL % (
+#                ', '.join(conf.name for conf in confs))
+#            memcache.set(MEMCACHE_ANNOUNCEMENTS_KEY, announcement)
+#        else:
+#            # If there are no sold out conferences,
+#            # delete the memcache announcements entry
+#            announcement = ""
+#            memcache.delete(MEMCACHE_ANNOUNCEMENTS_KEY)
+#
+#        return announcement
+
+
+#    @endpoints.method(message_types.VoidMessage, StringMessage,
+#            path='conference/announcement/get',
+#            http_method='GET', name='getAnnouncement')
+#    def getAnnouncement(self, request):
+#        """Return Announcement from memcache."""
+#        return StringMessage(data=memcache.get(MEMCACHE_ANNOUNCEMENTS_KEY) or "")
 
 # - - - Registration - - - - - - - - - - - - - - - - - - - -
 
