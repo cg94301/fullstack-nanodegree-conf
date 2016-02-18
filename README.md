@@ -40,6 +40,14 @@ Then start the application using the App Engine development server:
 
 You need to use Firefox to work with the API. Open Firefox and goto `localhost:8080`. Use the UI to log into the application. Then go to your profile and select a T-shirt size. Then create a conference via UI. You will need the webSafeConferenceKey that will be created for this conference later. You can find this key by going to the maintenance URL at `localhost:8000`. Select Datastore Viewer to find the key.
 
+When you're ready to deploy your project, issue this command:
+
+```
+  $ appcfg.py -A 'your_project_id' update fullstack-nanodegree-conf
+```
+
+Then go to `your_project_id.appspot.com` in your browser to access your deployed project.
+
 
 ## TASK 1: Add Sessions to a Conference
 
