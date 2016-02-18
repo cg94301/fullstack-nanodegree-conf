@@ -12,7 +12,7 @@ created/forked from conference.py by wesc on 2014 may 24
 
 # Replace the following lines with client IDs obtained from the APIs
 # Console or Cloud Console.
-WEB_CLIENT_ID = '801542560775-ua15m76fc089vk8k32vtdspvbih1ri6j.apps.googleusercontent.com'
+WEB_CLIENT_ID = 'your-appengine-web-client-id'
 ANDROID_CLIENT_ID = 'replace with Android client ID'
 IOS_CLIENT_ID = 'replace with iOS client ID'
 ANDROID_AUDIENCE = WEB_CLIENT_ID
