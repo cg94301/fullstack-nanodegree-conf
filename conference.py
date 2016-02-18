@@ -404,7 +404,7 @@ class ConferenceApi(remote.Service):
             raise endpoints.UnauthorizedException('Authorization required')
         user_id = getUserId(user)
 
-        # Get conference 
+        # Get conference
         urlkey = request.websafeConferenceKey
         conf_key = ndb.Key(urlsafe=urlkey)
         conf = conf_key.get()
@@ -476,7 +476,7 @@ class ConferenceApi(remote.Service):
     def _getSessions(self, request):
         """Return sessionss by conference, typeOfSession or speaker."""
 
-        # Get conference 
+        # Get conference
         if hasattr(request, 'websafeConferenceKey') and request.websafeConferenceKey:
           urlkey = request.websafeConferenceKey
           conf_key = ndb.Key(urlsafe=urlkey)
