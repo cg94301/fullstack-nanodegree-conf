@@ -50,9 +50,10 @@ from utils import getUserId
 EMAIL_SCOPE = endpoints.EMAIL_SCOPE
 API_EXPLORER_CLIENT_ID = endpoints.API_EXPLORER_CLIENT_ID
 MEMCACHE_ANNOUNCEMENTS_KEY = "RECENT_ANNOUNCEMENTS"
-MEMCACHE_SESSIONS_KEY = "RECENT_SESSIONS"
+MEMCACHE_SESSIONS_KEY = "MULTI_SESSIONS"
 ANNOUNCEMENT_TPL = ('Last chance to attend! The following conferences '
                     'are nearly sold out: %s')
+MULTISESSION_TPL = ('Featured speaker %s will speak on: %s')
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 DEFAULTS = {
@@ -106,6 +107,16 @@ SESSION_GET_REQUEST_BYSPEAKER = endpoints.ResourceContainer(
     speaker = messages.StringField(1),
 )
 
+SESSION_GET_REQUEST_BYDURATION = endpoints.ResourceContainer(
+    duration = messages.StringField(1),
+    websafeConferenceKey = messages.StringField(2),
+)
+
+SESSION_GET_REQUEST_BYDATE = endpoints.ResourceContainer(
+    date = messages.StringField(1),
+    websafeConferenceKey = messages.StringField(2),
+)
+
 SESSION_POST_REQUEST = endpoints.ResourceContainer(
     SessionForm,
     websafeConferenceKey=messages.StringField(1),
@@ -152,8 +163,6 @@ class ConferenceApi(remote.Service):
     def _createConferenceObject(self, request):
         """Create or update Conference object, returning ConferenceForm/request."""
 
-        print request
-
         # preload necessary data items
         user = endpoints.get_current_user()
         if not user:
@@ -189,18 +198,10 @@ class ConferenceApi(remote.Service):
         # generate Profile Key based on user ID and Conference
         # ID based on Profile key get Conference key from ID
         p_key = ndb.Key(Profile, user_id)
-        print "p_key"
-        print p_key
         c_id = Conference.allocate_ids(size=1, parent=p_key)[0]
-        print "c_id"
-        print c_id
         c_key = ndb.Key(Conference, c_id, parent=p_key)
-        print "c_key"
-        print c_key
         data['key'] = c_key
         data['organizerUserId'] = request.organizerUserId = user_id
-
-        print data
 
         # create Conference, send email to organizer confirming
         # creation of Conference & return (modified) ConferenceForm
@@ -273,8 +274,7 @@ class ConferenceApi(remote.Service):
     def getConference(self, request):
         """Return requested conference (by websafeConferenceKey)."""
         # get Conference object from request; bail if not found
-        print "DEBUG"
-        print request.websafeConferenceKey
+
         conf = ndb.Key(urlsafe=request.websafeConferenceKey).get()
         if not conf:
             raise endpoints.NotFoundException(
@@ -447,19 +447,22 @@ class ConferenceApi(remote.Service):
         session_key = ndb.Key(Session, session_id, parent=conf_key)
         data['key'] = session_key
 
-        print "session_key"
-        print session_key
-
-        print data
-
         # Write to datastore
         Session(**data).put()
 
-        
-        print data['speaker']
-        taskqueue.add(params={'speaker': data['speaker']},
-                      url='/tasks/set_session_announcement'
-        )
+
+        # Check if more sessions by this speaker
+        # If so, set memcache announcement via task queue
+        speaker = data['speaker']
+        sessions = Session.query(ancestor=conf_key)
+        sessions = sessions.filter(Session.speaker==speaker)
+        speakersessions = [ session.name for session in sessions ]
+
+        if len(speakersessions) > 1:
+          multisession = MULTISESSION_TPL % (speaker, ', '.join(speakersessions))
+          taskqueue.add(params={'announcement': multisession},
+                        url='/tasks/set_session_announcement'
+                      )
 
         return message_types.VoidMessage()
 
@@ -478,7 +481,6 @@ class ConferenceApi(remote.Service):
           urlkey = request.websafeConferenceKey
           conf_key = ndb.Key(urlsafe=urlkey)
           conf = conf_key.get()
-          print conf
 
           # create ancestor query for all key matches for this user
           sessions = Session.query(ancestor=conf_key)
@@ -487,13 +489,18 @@ class ConferenceApi(remote.Service):
           if hasattr(request, 'typeOfSession') and request.typeOfSession:
             sessions = sessions.filter(Session.typeOfSession==request.typeOfSession)
 
+          # if duration has been specified, filter by that
+          if hasattr(request, 'duration') and request.duration:
+            sessions = sessions.filter(Session.duration <= int(request.duration))
+            sessions = sessions.filter(Session.duration > 0)
+
+          # if date has been specified, filter by that
+          if hasattr(request, 'date') and request.date:
+            sessions = sessions.filter(Session.date == datetime.strptime(request.date[:10], "%Y-%m-%d").date())
+
         elif request.speaker:
           sessions = Session.query()
           sessions = sessions.filter(Session.speaker==request.speaker)
-
-        for session in sessions:
-          print "session:"
-          print session
 
         # get organizers
         organisers = [ndb.Key(Profile, session.organizerUserId) for session in sessions]
@@ -531,6 +538,20 @@ class ConferenceApi(remote.Service):
         """Get sessions by speaker."""
         return self._getSessions(request)
 
+    @endpoints.method(SESSION_GET_REQUEST_BYDURATION, SessionForms,
+            path='getConferenceSessionsByDuration',
+            http_method='POST', name='getConferenceSessionsByDuration')
+    def getConferenceSessionsByDuration(self, request):
+        """Get sessions that are shorter or equal to duration."""
+        return self._getSessions(request)
+
+    @endpoints.method(SESSION_GET_REQUEST_BYDATE, SessionForms,
+            path='getConferenceSessionsByDate',
+            http_method='POST', name='getConferenceSessionsByDate')
+    def getConferenceSessionsByDate(self, request):
+        """Get sessions that happen on date."""
+        return self._getSessions(request)
+
 # - - - Session Wishlist - - - - - - - - - - - - - - - - - - -
 
     @ndb.transactional(xg=True)
@@ -554,14 +575,8 @@ class ConferenceApi(remote.Service):
                 raise ConflictException(
                     "You have already registered for this session")
 
-            # check if seats avail
-            #if conf.seatsAvailable <= 0:
-            #    raise ConflictException(
-            #        "There are no seats available.")
-
-            # register user, take away one seat
+            # register session
             prof.sessionKeysToAttend.append(wssk)
-            #conf.seatsAvailable -= 1
             retval = True
 
         # unregister
@@ -571,7 +586,6 @@ class ConferenceApi(remote.Service):
 
                 # unregister user, add back one seat
                 prof.sessionKeysToAttend.remove(wssk)
-                #conf.seatsAvailable += 1
                 retval = True
             else:
                 retval = False
@@ -738,38 +752,16 @@ class ConferenceApi(remote.Service):
     def _cacheSessionAnnouncement(speaker):
       """Create Session Announcement & assign to memcache.
       """
-      #confs = Conference.query(ndb.AND(
-      #    Conference.seatsAvailable <= 5,
-      #    Conference.seatsAvailable > 0)
-      #).fetch(projection=[Conference.name])
-
-      print "MEMCACHE Session called"
-      print speaker
-
       memcache.set(MEMCACHE_SESSIONS_KEY, speaker)
 
       return speaker
-#        if confs:
-#            # If there are almost sold out conferences,
-#            # format announcement and set it in memcache
-#            announcement = ANNOUNCEMENT_TPL % (
-#                ', '.join(conf.name for conf in confs))
-#            memcache.set(MEMCACHE_ANNOUNCEMENTS_KEY, announcement)
-#        else:
-#            # If there are no sold out conferences,
-#            # delete the memcache announcements entry
-#            announcement = ""
-#            memcache.delete(MEMCACHE_ANNOUNCEMENTS_KEY)
-#
-#        return announcement
 
-
-#    @endpoints.method(message_types.VoidMessage, StringMessage,
-#            path='conference/announcement/get',
-#            http_method='GET', name='getAnnouncement')
-#    def getAnnouncement(self, request):
-#        """Return Announcement from memcache."""
-#        return StringMessage(data=memcache.get(MEMCACHE_ANNOUNCEMENTS_KEY) or "")
+    @endpoints.method(message_types.VoidMessage, StringMessage,
+                      path='session/announcement/get',
+                      http_method='GET', name='getSessionAnnouncement')
+    def getSessionAnnouncement(self, request):
+      """Return Session Announcement from memcache."""
+      return StringMessage(data=memcache.get(MEMCACHE_SESSIONS_KEY) or "")
 
 # - - - Registration - - - - - - - - - - - - - - - - - - - -
 
@@ -875,7 +867,8 @@ class ConferenceApi(remote.Service):
         # q = q.filter(f)
         q = q.filter(Conference.city=="London")
         q = q.filter(Conference.topics=="Medical Innovations")
-        q = q.filter(Conference.month==6)
+        q = q.filter(Conference.maxAttendees>3)
+        q = q.order(Conference.name)
 
         return ConferenceForms(
             items=[self._copyConferenceToForm(conf, "") for conf in q]

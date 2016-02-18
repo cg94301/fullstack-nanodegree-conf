@@ -27,8 +27,8 @@ class SetSessionAnnouncementHandler(webapp2.RequestHandler):
     def post(self):
         """Set Session Announcement in Memcache."""
         print "Called SetSessionAnnouncementHandler"
-        print self.request.get('speaker')
-        ConferenceApi._cacheSessionAnnouncement(self.request.get('speaker'))
+        print self.request.get('announcement')
+        ConferenceApi._cacheSessionAnnouncement(self.request.get('announcement'))
         self.response.set_status(204)
 
 class SendConfirmationEmailHandler(webapp2.RequestHandler):
