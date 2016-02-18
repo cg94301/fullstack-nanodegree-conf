@@ -761,8 +761,8 @@ class ConferenceApi(remote.Service):
 
     @endpoints.method(message_types.VoidMessage, StringMessage,
                       path='session/announcement/get',
-                      http_method='GET', name='getSessionAnnouncement')
-    def getSessionAnnouncement(self, request):
+                      http_method='GET', name='getFeaturedSpeaker')
+    def getFeaturedSpeaker(self, request):
       """Return Session Announcement from memcache."""
       return StringMessage(data=memcache.get(MEMCACHE_SESSIONS_KEY) or "")
 
@@ -863,11 +863,6 @@ class ConferenceApi(remote.Service):
     def filterPlayground(self, request):
         """Filter Playground"""
         q = Conference.query()
-        # field = "city"
-        # operator = "="
-        # value = "London"
-        # f = ndb.query.FilterNode(field, operator, value)
-        # q = q.filter(f)
         q = q.filter(Conference.city=="London")
         q = q.filter(Conference.topics=="Medical Innovations")
         q = q.filter(Conference.maxAttendees>3)
