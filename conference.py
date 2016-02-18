@@ -377,6 +377,7 @@ class ConferenceApi(remote.Service):
 
 # - - - Session objects - - - - - - - - - - - - - - - - -
 
+    # Copy a session object from ndb.Model to messages.Message
     def _copySessionToForm(self, session, displayName):
         """Copy relevant fields from Conference to ConferenceForm."""
         sf = SessionForm()
@@ -458,6 +459,8 @@ class ConferenceApi(remote.Service):
         sessions = sessions.filter(Session.speaker==speaker)
         speakersessions = [ session.name for session in sessions ]
 
+        # if this speaker has more than one session, add memcache announcement
+        # via task push queue
         if len(speakersessions) > 1:
           multisession = MULTISESSION_TPL % (speaker, ', '.join(speakersessions))
           taskqueue.add(params={'announcement': multisession},
