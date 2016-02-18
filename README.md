@@ -51,6 +51,41 @@ Then go to `your_project_id.appspot.com` in your browser to access your deployed
 
 ## TASK 1: Add Sessions to a Conference
 
+Here's how Session and SessionForm were implemented. The ndb Model object has 8 properties as required. The outgoing form has additional properties: `organizerUserId` and `organizerDisplayName` to identify the organizer and provide shortcut to the display name; `websafeKey` to identify the session in the view. 
+
+For the speaker a string property was chosen. This will make search by speaker less flexible. But this was chosen for simplicity of implementation.
+
+```
+class Session(ndb.Model):
+    """Session -- Session object"""
+    name            = ndb.StringProperty(required=True)
+    highlights      = ndb.StringProperty()
+    speaker         = ndb.StringProperty()
+    duration        = ndb.IntegerProperty()
+    typeOfSession   = ndb.StringProperty()
+    date            = ndb.DateProperty()
+    startTime       = ndb.TimeProperty()
+    organizerUserId = ndb.StringProperty()
+
+class SessionForm(messages.Message):
+    """SessionForm -- Session outbound form message"""
+    name            = messages.StringField(1)
+    highlights      = messages.StringField(2)
+    speaker         = messages.StringField(3)
+    duration        = messages.IntegerField(4, variant=messages.Variant.INT32)
+    typeOfSession   = messages.StringField(5)
+    date            = messages.StringField(6)
+    startTime       = messages.StringField(7)
+    organizerUserId = messages.StringField(8)
+    organizerDisplayName = messages.StringField(9)
+    websafeKey      = messages.StringField(10)
+
+class SessionForms(messages.Message):
+    """SessionForms -- multiple Sessions outbound form message"""
+    items = messages.MessageField(SessionForm, 1, repeated=True)
+```
+
+
 The following endpoints methods have been defined:
 
 `getConferenceSessions(websafeConferenceKey)` -- Given a conference, return all sessions
@@ -158,5 +193,11 @@ The query can retrieve either all session that are not workshops or all sessions
 When a new session is added to a conference, the speaker is checked. If there is more than one session by this speaker at this conference, a new Memcache entry that features the speaker and session names is added. The Memcache key is `MULTI_SESSIONS`. The logic above is handled by using App Engine's Task Queue.
 
 The following endpoints method has been implemented:
+
+`getSessionsInWishList()`
+
+`addSessionToWishList(websafeConferenceKey)`
+
+`deleteSessionInWishList(websafeSessionKey)`
 
 `getFeaturedSpeaker()`
