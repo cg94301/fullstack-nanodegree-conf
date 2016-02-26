@@ -478,7 +478,8 @@ class ConferenceApi(remote.Service):
         return self._createSessionObject(request)
 
     def _getSessions(self, request):
-        """Return sessions by conference, typeOfSession or speaker."""
+        """Return sessions by conference and optionally filter by typeOfSession or duartion or date. 
+        Or return sessions by speaker."""
 
         # Get conference
         if hasattr(request, 'websafeConferenceKey') and request.websafeConferenceKey:
