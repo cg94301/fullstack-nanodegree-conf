@@ -378,27 +378,27 @@ class ConferenceApi(remote.Service):
 # - - - Session objects - - - - - - - - - - - - - - - - -
 
     # Copy a session object from ndb.Model to messages.Message
-    def _copySessionToForm(self, session, displayName):
-        """Copy relevant fields from Conference to ConferenceForm."""
+    def _copySessionToForm(self, session, user_id):
+        """Copy relevant fields from Session to SessionForm."""
         sf = SessionForm()
         for field in sf.all_fields():
             if hasattr(session, field.name):
-                # convert Date to date string; just copy others
-                if field.name.endswith('date'):
+                if field.name.endswith(('date', 'startTime')):
                     setattr(sf, field.name, str(getattr(session, field.name)))
-                elif field.name.endswith('startTime'):
-                    setattr(sf, field.name, str(getattr(session, field.name)))
+                #elif field.name.endswith('startTime'):
+                #    setattr(sf, field.name, str(getattr(session, field.name)))
                 else:
                     setattr(sf, field.name, getattr(session, field.name))
             elif field.name == "websafeKey":
                 setattr(sf, field.name, session.key.urlsafe())
-        if displayName:
-            setattr(sf, 'organizerDisplayName', displayName)
+        if user_id:
+            prof = ndb.Key(Profile, user_id).get()
+            setattr(sf, 'organizerDisplayName', getattr(prof, 'displayName'))
         sf.check_initialized()
         return sf
 
     def _createSessionObject(self, request):
-
+        """Create Session object from request and store in datastore."""
         # Check that user logged in
         user = endpoints.get_current_user()
         if not user:
@@ -467,17 +467,18 @@ class ConferenceApi(remote.Service):
                         url='/tasks/set_session_announcement'
                       )
 
-        return message_types.VoidMessage()
+        #return message_types.VoidMessage()
+        return self._copySessionToForm(session_key.get(), user_id) 
 
-    @endpoints.method(SESSION_POST_REQUEST, message_types.VoidMessage,
+    @endpoints.method(SESSION_POST_REQUEST, SessionForm,
             path='session/{websafeConferenceKey}',
             http_method='PUT', name='createSession')
     def createSession(self, request):
-        """Update conference w/provided fields & return w/updated info."""
+        """Create a new session and return Session Form."""
         return self._createSessionObject(request)
 
     def _getSessions(self, request):
-        """Return sessionss by conference, typeOfSession or speaker."""
+        """Return sessions by conference, typeOfSession or speaker."""
 
         # Get conference
         if hasattr(request, 'websafeConferenceKey') and request.websafeConferenceKey:
