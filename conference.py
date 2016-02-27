@@ -394,7 +394,7 @@ class ConferenceApi(remote.Service):
         if userid:
             prof = ndb.Key(Profile, userid).get()
             setattr(sf, 'organizerDisplayName', getattr(prof, 'displayName'))
- 
+            
         sf.check_initialized()
         return sf
 
@@ -453,11 +453,11 @@ class ConferenceApi(remote.Service):
         Session(**data).put()
 
 
-        # Make announcement for featured speaker via task queue. 
+        # Make announcement for featured speaker via task queue.
         speaker = data['speaker']
         taskqueue.add(params={'speaker': speaker, 'websafeConferenceKey': urlkey}, url='/tasks/set_session_announcement')
 
-        return self._copySessionToForm(session_key.get()) 
+        return self._copySessionToForm(session_key.get())
 
     @endpoints.method(SESSION_POST_REQUEST, SessionForm,
             path='session/{websafeConferenceKey}',
