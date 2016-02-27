@@ -532,14 +532,14 @@ class ConferenceApi(remote.Service):
 
     @endpoints.method(SESSION_GET_REQUEST, SessionForms,
             path='getConferenceSessions',
-            http_method='POST', name='getConferenceSessions')
+            http_method='GET', name='getConferenceSessions')
     def getConferenceSessions(self, request):
         """Get sessions by conference."""
         return self._getSessions(request)
 
     @endpoints.method(SESSION_GET_REQUEST_BYTYPE, SessionForms,
             path='getConferenceSessionsByType',
-            http_method='POST', name='getConferenceSessionsByType')
+            http_method='GET', name='getConferenceSessionsByType')
     def getConferenceSessionsByType(self, request):
         """Get sessions by conference and type."""
         if not request.websafeConferenceKey:
@@ -548,14 +548,14 @@ class ConferenceApi(remote.Service):
 
     @endpoints.method(SESSION_GET_REQUEST_BYSPEAKER, SessionForms,
             path='getSessionsBySpeaker',
-            http_method='POST', name='getSessionsBySpeaker')
+            http_method='GET', name='getSessionsBySpeaker')
     def getSessionsBySpeaker(self, request):
         """Get sessions by speaker."""
         return self._getSessions(request)
 
     @endpoints.method(SESSION_GET_REQUEST_BYDURATION, SessionForms,
             path='getConferenceSessionsByDuration',
-            http_method='POST', name='getConferenceSessionsByDuration')
+            http_method='GET', name='getConferenceSessionsByDuration')
     def getConferenceSessionsByDuration(self, request):
         """Get sessions that are shorter or equal to duration."""
         if not request.websafeConferenceKey:
@@ -564,7 +564,7 @@ class ConferenceApi(remote.Service):
 
     @endpoints.method(SESSION_GET_REQUEST_BYDATE, SessionForms,
             path='getConferenceSessionsByDate',
-            http_method='POST', name='getConferenceSessionsByDate')
+            http_method='GET', name='getConferenceSessionsByDate')
     def getConferenceSessionsByDate(self, request):
         """Get sessions that happen on date."""
         if not request.websafeConferenceKey:
