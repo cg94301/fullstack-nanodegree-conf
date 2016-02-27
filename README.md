@@ -135,9 +135,11 @@ SESSION_GET_REQUEST_BYDURATION = endpoints.ResourceContainer(
 
     @endpoints.method(SESSION_GET_REQUEST_BYDURATION, SessionForms,
             path='getConferenceSessionsByDuration',
-            http_method='POST', name='getConferenceSessionsByDuration')
+            http_method='GET', name='getConferenceSessionsByDuration')
     def getConferenceSessionsByDuration(self, request):
         """Get sessions that are shorter or equal to duration."""
+        if not request.websafeConferenceKey:
+            raise endpoints.BadRequestException('Missing websafeConferenceKey field')
         return self._getSessions(request)
 
     def _getSessions(self, request):
@@ -161,9 +163,11 @@ SESSION_GET_REQUEST_BYDATE = endpoints.ResourceContainer(
 
     @endpoints.method(SESSION_GET_REQUEST_BYDATE, SessionForms,
             path='getConferenceSessionsByDate',
-            http_method='POST', name='getConferenceSessionsByDate')
+            http_method='GET', name='getConferenceSessionsByDate')
     def getConferenceSessionsByDate(self, request):
         """Get sessions that happen on date."""
+        if not request.websafeConferenceKey:
+            raise endpoints.BadRequestException('Missing websafeConferenceKey field')
         return self._getSessions(request)
 
     def _getSessions(self, request):
@@ -171,7 +175,6 @@ SESSION_GET_REQUEST_BYDATE = endpoints.ResourceContainer(
 
          # if date has been specified, filter by that
           if hasattr(request, 'date') and request.date:
-            print request.date
             sessions = sessions.filter(Session.date == datetime.strptime(request.date[:10], "%Y-%m-%d").date())
 ```
 
@@ -193,11 +196,5 @@ The query can retrieve either all session that are not workshops or all sessions
 When a new session is added to a conference, the speaker is checked. If there is more than one session by this speaker at this conference, a new Memcache entry that features the speaker and session names is added. The Memcache key is `MULTI_SESSIONS`. The logic above is handled by using App Engine's Task Queue.
 
 The following endpoints method has been implemented:
-
-`getSessionsInWishList()`
-
-`addSessionToWishList(websafeConferenceKey)`
-
-`deleteSessionInWishList(websafeSessionKey)`
 
 `getFeaturedSpeaker()`
