@@ -616,7 +616,7 @@ class ConferenceApi(remote.Service):
 
 
     @endpoints.method(message_types.VoidMessage, SessionForms,
-            path='sessions/attending',
+            path='profile/wishlist/attending',
             http_method='GET', name='getSessionsInWishlist')
     def getSessionsInWishlist(self, request):
         """Get list of sessions that user has registered for."""
@@ -639,7 +639,7 @@ class ConferenceApi(remote.Service):
 
 
     @endpoints.method(SESSION_WISH_REQUEST, BooleanMessage,
-            path='session/{websafeSessionKey}',
+            path='profile/wishlist/{websafeSessionKey}',
             http_method='POST', name='addSessionToWishlist')
     def addSessionToWishList(self, request):
         """Add select session to wishlist."""
@@ -647,7 +647,7 @@ class ConferenceApi(remote.Service):
 
 
     @endpoints.method(SESSION_WISH_REQUEST, BooleanMessage,
-            path='session/{websafeSessionKey}',
+            path='profile/wishlist/{websafeSessionKey}',
             http_method='DELETE', name='deleteSessionInWishlist')
     def deleteSessionInWishList(self, request):
         """Unregister user for selected session."""
