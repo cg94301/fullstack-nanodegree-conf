@@ -385,18 +385,11 @@ class ConferenceApi(remote.Service):
             if hasattr(session, field.name):
                 if field.name.endswith(('date', 'startTime')):
                     setattr(sf, field.name, str(getattr(session, field.name)))
-                #elif field.name.endswith('startTime'):
-                #    setattr(sf, field.name, str(getattr(session, field.name)))
                 else:
                     setattr(sf, field.name, getattr(session, field.name))
             elif field.name == "websafeKey":
                 setattr(sf, field.name, session.key.urlsafe())
-        #print "user_id"
-        #print user_id
-        #print "organizerUserId"
-        #print getattr(session, "organizerUserId")
-        #print "sf organizerUserId"
-        #print getattr(sf, "organizerUserId")
+
         userid = getattr(sf, "organizerUserId")
         if userid:
             prof = ndb.Key(Profile, userid).get()
@@ -460,22 +453,10 @@ class ConferenceApi(remote.Service):
         Session(**data).put()
 
 
-        # Check if more sessions by this speaker
-        # If so, set memcache announcement via task queue
+        # Make announcement for featured speaker via task queue. 
         speaker = data['speaker']
-        sessions = Session.query(ancestor=conf_key)
-        sessions = sessions.filter(Session.speaker == speaker)
-        speakersessions = [ session.name for session in sessions ]
+        taskqueue.add(params={'speaker': speaker, 'websafeConferenceKey': urlkey}, url='/tasks/set_session_announcement')
 
-        # if this speaker has more than one session, add memcache announcement
-        # via task push queue
-        if len(speakersessions) > 1:
-          multisession = MULTISESSION_TPL % (speaker, ', '.join(speakersessions))
-          taskqueue.add(params={'announcement': multisession},
-                        url='/tasks/set_session_announcement'
-                      )
-
-        #return message_types.VoidMessage()
         return self._copySessionToForm(session_key.get()) 
 
     @endpoints.method(SESSION_POST_REQUEST, SessionForm,
@@ -515,16 +496,6 @@ class ConferenceApi(remote.Service):
           sessions = Session.query()
           sessions = sessions.filter(Session.speaker == request.speaker)
 
-        # get organizers
-        #organisers = [ndb.Key(Profile, session.organizerUserId) for session in sessions]
-        #profiles = ndb.get_multi(organisers)
-
-        # put display names in a dict for easier fetching
-        #names = {}
-        #for profile in profiles:
-        #    names[profile.key.id()] = profile.displayName
-
-        # return set of SessionForm objects per Session
         return SessionForms(
             items=[self._copySessionToForm(session) for session in sessions]
         )
@@ -624,16 +595,6 @@ class ConferenceApi(remote.Service):
         sess_keys = [ndb.Key(urlsafe=wssk) for wssk in prof.sessionKeysToAttend]
         sessions = ndb.get_multi(sess_keys)
 
-        # get organizers
-        #organisers = [ndb.Key(Profile, session.organizerUserId) for session in sessions]
-        #profiles = ndb.get_multi(organisers)
-
-        # put display names in a dict for easier fetching
-        #names = {}
-        #for profile in profiles:
-        #    names[profile.key.id()] = profile.displayName
-
-        # return set of ConferenceForm objects per Conference
         return SessionForms(items=[self._copySessionToForm(session) for session in sessions]
         )
 
@@ -767,12 +728,20 @@ class ConferenceApi(remote.Service):
         return StringMessage(data=memcache.get(MEMCACHE_ANNOUNCEMENTS_KEY) or "")
 
     @staticmethod
-    def _cacheSessionAnnouncement(speaker):
-      """Create Session Announcement & assign to memcache.
-      """
-      memcache.set(MEMCACHE_SESSIONS_KEY, speaker)
+    def _cacheSessionAnnouncement(speaker, urlkey):
+        """Create Session Announcement & assign to memcache."""
 
-      return speaker
+        # Get all sessions by speaker
+        conf_key = ndb.Key(urlsafe=urlkey)
+        sessions = Session.query(ancestor=conf_key)
+        sessions = sessions.filter(Session.speaker == speaker)
+        speakersessions = [ session.name for session in sessions ]
+
+        # If speaker has more than one session, set memcache announcement
+        if len(speakersessions) > 1:
+          multisession = MULTISESSION_TPL % (speaker, ', '.join(speakersessions))
+          memcache.set(MEMCACHE_SESSIONS_KEY, multisession)
+
 
     @endpoints.method(message_types.VoidMessage, StringMessage,
                       path='session/announcement/get',
